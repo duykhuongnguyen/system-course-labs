@@ -1,0 +1,5 @@
+Level | Cache Line Size | Total Size | Number of Ways (Associativity) | Number of Sets | Raw Latency
+----- | ---------------- | ---------- | ------------------------------ | -------------- | ------------
+L1    | 64 Bytes         | 32 KB      | 8                              | 64             | 4 cycles
+L2    | 64 Bytes         | 1 MB       | 16                             | 1024           | 12 cycles
+L3    | 64 Bytes         | 11 MB      | 11                             | 1792           | 44 cycles
