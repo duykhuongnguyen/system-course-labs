@@ -4,10 +4,10 @@
 #include <sys/mman.h>
 
 
+
 int main(int argc, char **argv)
 {
-    // 1. Covert Channel Setup
-    uint8_t *buf = mmap(NULL, 2 * 1024 * 1024, 
+    uint8_t *buf = mmap(NULL, 2 * 1024 * 1024,  // 2MB buffer
                         PROT_READ | PROT_WRITE,
                         MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE,
                         -1, 0);
@@ -16,7 +16,7 @@ int main(int argc, char **argv)
         exit(1);
     }
 
-    volatile uint8_t *target = buf + 4096 * 0; // pick one cache set (e.g., set 0)
+    volatile uint8_t *target = buf + 4096 * 0; // Same target address as sender
 
     printf("Please press enter.\n");
 
@@ -25,26 +25,29 @@ int main(int argc, char **argv)
 
     printf("Receiver now listening.\n");
 
-    bool listening = true;
-    while (listening) {
+    while (1) {
+        int received_value = 0;
 
-        uint64_t time = measure_one_block_access_time((uint64_t)target);
+        // Receive 8 bits
+        for (int i = 7; i >= 0; i--) {
+            uint64_t time = measure_one_block_access_time((uint64_t)target);
 
-        int received_bit;
-        uint64_t threshold = 20;
+            int received_bit;
+            uint64_t threshold = 20; // threshold to distinguish 1 and 0
 
-        if (time > threshold) {
-            received_bit = 1;
-        } else {
-            received_bit = 0;
+            if (time > threshold) {
+                received_bit = 1;
+            } else {
+                received_bit = 0;
+            }
+
+            received_value |= (received_bit << i);
         }
 
-        printf("%d\n", received_bit);
-
+        printf("Received: %d\n", received_value);
     }
 
     printf("Receiver finished.\n");
-
     return 0;
 }
 

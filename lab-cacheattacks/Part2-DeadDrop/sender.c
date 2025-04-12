@@ -9,35 +9,33 @@
 
 int main(int argc, char **argv)
 {
+    // Allocate buffer using huge page
     void *buf = mmap(NULL, BUFF_SIZE, PROT_READ | PROT_WRITE,
                      MAP_POPULATE | MAP_ANONYMOUS | MAP_PRIVATE | MAP_HUGETLB,
                      -1, 0);
-
     if (buf == (void*) -1) {
         perror("mmap() error\n");
         exit(EXIT_FAILURE);
     }
 
-    volatile uint8_t *target = (uint8_t *)buf + 4096 * 0; // same target as receiver
+    volatile uint8_t *target = (uint8_t *)buf + 4096 * 0; // Target address
 
-    printf("Please type a message (only '0' and '1').\n");
+    printf("Please type a number (0-255).\n");
 
     bool sending = true;
     while (sending) {
         char text_buf[128];
         fgets(text_buf, sizeof(text_buf), stdin);
 
-        // Loop through each character the user typed
-        for (int i = 0; text_buf[i] != '\0'; i++) {
-            char c = text_buf[i];
-            if (c == '0' || c == '1') {
-                int bit = c - '0'; // convert '0'/'1' to integer
+        int value = atoi(text_buf); // Convert input string to integer (0-255)
 
-                if (bit == 1) {
-                    // Send 1 by hammering memory
-                    for (int j = 0; j < 1000; j++) {
-                        *target;
-                    }
+        // Send each bit from MSB to LSB
+        for (int i = 7; i >= 0; i--) {
+            int bit = (value >> i) & 1;
+
+            if (bit == 1) {
+                for (int j = 0; j < 1000; j++) {
+                    *target;
                 }
             }
         }
