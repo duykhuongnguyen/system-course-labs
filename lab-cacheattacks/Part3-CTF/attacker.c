@@ -6,13 +6,13 @@ int main(int argc, char const *argv[]) {
     int flag = -1;
 
     // Put your capture-the-flag code here
-    uint8_t *buf = mmap(NULL, 2 * 1024 * 1024,  // 2MB buffer
-                        PROT_READ | PROT_WRITE,
-                        MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE,
-                        -1, 0);
+    uint8_t *buf = mmap(NULL, 8 * 1024 * 1024,  // 8MB buffer
+        PROT_READ | PROT_WRITE,
+        MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE,
+        -1, 0);
     if (buf == MAP_FAILED) {
-        perror("mmap");
-        exit(1);
+    perror("mmap");
+    exit(1);
     }
 
     uint64_t max_latency = 0;
