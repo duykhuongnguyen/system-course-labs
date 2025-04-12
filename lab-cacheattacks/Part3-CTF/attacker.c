@@ -32,7 +32,6 @@ int main(int argc, char const *argv[]) {
             uint64_t avg_time = total_time / samples_per_set;
             set_scores[set] += avg_time; // Accumulate score
         }
-        usleep(1000); // Sleep 1ms between rounds
     }
 
     // Find the set with maximum accumulated score
