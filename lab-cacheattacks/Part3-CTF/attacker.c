@@ -24,7 +24,7 @@ int main(int argc, char const *argv[]) {
 
         for (int i = 0; i < 5; i++) {  // Average over 5 measurements
             volatile uint8_t *addr = buf + (set * 4096); // 1 set per 4KB
-            total_time += measure_one_block_access_time((void *)addr);
+            total_time += measure_one_block_access_time((uint64_t)addr);
         }
 
         uint64_t avg_time = total_time / 5;
