@@ -1,0 +1,2 @@
+Fill the entire L2 cache needs to access 16384 cache lines
+Fill the entire L3 cache needs to access 180224 cache lines

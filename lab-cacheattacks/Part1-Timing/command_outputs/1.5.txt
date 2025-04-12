@@ -1,0 +1,2 @@
+Threshold to distinguish between L2 and L3 latency: 20
+Threshold to distinguish between L3 and DRAM latency: 100
