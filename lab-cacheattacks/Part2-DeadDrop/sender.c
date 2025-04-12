@@ -39,10 +39,6 @@ int main(int argc, char **argv)
                         *target;
                     }
                 }
-                else {
-                    // Send 0 by doing nothing
-                    usleep(500); // 0.5ms pause
-                }
             }
         }
     }
