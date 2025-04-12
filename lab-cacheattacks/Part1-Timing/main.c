@@ -46,17 +46,41 @@ int main (int ac, char **av) {
     // [1.2] TODO: Measure DRAM Latency, store results in dram_latency array
     // ======
     //
+    for (int i = 0; i < SAMPLES; i++) {
+        clflush((void *)target_buffer);
+        mfence();
+        dram_latency[i] = measure_one_block_access_time((uint64_t)target_buffer);
+    }
 
     // ======
     // [1.2] TODO: Measure L2 Latency, store results in l2_latency array
     // ======
     //
+    for (int i = 0; i < SAMPLES; i++) {
+        tmp = target_buffer[0];
+
+        // Evict from L1 by accessing some nearby cache lines
+        for (int j = 0; j < 64; j++) {
+            volatile uint64_t dummy = eviction_buffer[j * 8];
+        }
+
+        l2_latency[i] = measure_one_block_access_time((uint64_t)target_buffer);
+    }
 
     // ======
     // [1.2] TODO: Measure L3 Latency, store results in l3_latency array
     // ======
     //
+    for (int i = 0; i < SAMPLES; i++) {
+        tmp = target_buffer[0];
 
+        // Evict from L1 and L2 by accessing a larger portion of eviction buffer
+        for (int j = 0; j < 4096; j++) {
+            volatile uint64_t dummy = eviction_buffer[j * 8];
+        }
+
+        l3_latency[i] = measure_one_block_access_time((uint64_t)target_buffer);
+    }
 
     // Print the results to the screen
     // [1.5] Change print_results to print_results_for_python so that your code will work
