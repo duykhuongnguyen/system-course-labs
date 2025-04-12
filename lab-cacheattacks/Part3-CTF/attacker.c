@@ -15,22 +15,33 @@ int main(int argc, char const *argv[]) {
     exit(1);
     }
 
-    uint64_t max_latency = 0;
+    uint64_t set_scores[2048] = {0}; // Accumulate timing scores per set
+
+    int rounds = 20; // How many full scans of all sets
+    int samples_per_set = 5; // How many samples per set in each round
+
+    for (int round = 0; round < rounds; round++) {
+        for (int set = 0; set < 2048; set++) {
+            uint64_t total_time = 0;
+
+            for (int i = 0; i < samples_per_set; i++) {
+                volatile uint8_t *addr = buf + (set * 4096); // 1 set per 4KB
+                total_time += measure_one_block_access_time((uint64_t)addr);
+            }
+
+            uint64_t avg_time = total_time / samples_per_set;
+            set_scores[set] += avg_time; // Accumulate score
+        }
+        usleep(1000); // Sleep 1ms between rounds
+    }
+
+    // Find the set with maximum accumulated score
+    uint64_t max_score = 0;
     int best_set = -1;
 
-    // Measure each set
-    for (int set = 0; set < 2048; set++) {  // 2048 sets in L2
-        uint64_t total_time = 0;
-
-        for (int i = 0; i < 5; i++) {  // Average over 5 measurements
-            volatile uint8_t *addr = buf + (set * 4096); // 1 set per 4KB
-            total_time += measure_one_block_access_time((uint64_t)addr);
-        }
-
-        uint64_t avg_time = total_time / 5;
-
-        if (avg_time > max_latency) {
-            max_latency = avg_time;
+    for (int set = 0; set < 2048; set++) {
+        if (set_scores[set] > max_score) {
+            max_score = set_scores[set];
             best_set = set;
         }
     }
