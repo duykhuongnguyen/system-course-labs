@@ -32,6 +32,8 @@ void wait_for_start_signal() {
     // First wait until start signal is CLEAR (low latency)
     while (1) {
         int access_time = probe_cache_line(0);
+        printf("[Debug] Access time to line 0: %d\n", access_time);
+        fflush(stdout);
         if (access_time < THRESHOLD) {
             break;
         }
@@ -41,6 +43,8 @@ void wait_for_start_signal() {
     // Then wait until start signal is SET (high latency)
     while (1) {
         int access_time = probe_cache_line(0);
+        printf("[Debug] Access time to line 0: %d\n", access_time);
+        fflush(stdout);
         if (access_time > THRESHOLD) {
             break;
         }
