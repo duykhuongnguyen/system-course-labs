@@ -8,7 +8,7 @@
 #include <sys/mman.h>
 
 #define BUFF_SIZE (1 << 21)
-#define THRESHOLD 160
+#define THRESHOLD 300
 #define NUM_SAMPLES 5
 
 volatile uint8_t *buffer;
