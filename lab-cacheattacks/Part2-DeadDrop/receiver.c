@@ -8,13 +8,13 @@
 #include <sys/mman.h>
 
 #define BUFF_SIZE (1 << 21)
-#define THRESHOLD 150
+#define THRESHOLD 160
 #define NUM_SAMPLES 5
 
 volatile uint8_t *buffer;
 
 int probe_cache_line(int idx) {
-    volatile uint8_t *addr = buffer + (idx * 64);
+    volatile uint8_t *addr = buffer + (idx * 4096);
     uint64_t time = measure_one_block_access_time((void *)addr);
     return time;
 }
@@ -32,19 +32,19 @@ void wait_for_start_signal() {
     // First wait until start signal is CLEAR (low latency)
     while (1) {
         int access_time = probe_cache_line(0);
-        if (access_time < THRESHOLD) { // Fast access → no signal yet
+        if (access_time < THRESHOLD) {
             break;
         }
-        usleep(1000);
+        usleep(5000);
     }
 
     // Then wait until start signal is SET (high latency)
     while (1) {
         int access_time = probe_cache_line(0);
-        if (access_time > THRESHOLD) { // Slow access → sender signaling
+        if (access_time > THRESHOLD) {
             break;
         }
-        usleep(1000);
+        usleep(5000);
     }
 }
 
@@ -69,7 +69,7 @@ int main() {
         }
         printf("%d\n", received);
         fflush(stdout);
-        usleep(50000); // Wait a bit before next listen
+        usleep(100000); // Wait longer before next listen
     }
     return 0;
 }
