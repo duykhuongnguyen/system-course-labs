@@ -19,12 +19,22 @@ int probe_cache_line(int idx) {
 }
 
 void wait_for_start_signal() {
+    // First wait until start signal is CLEAR (low latency)
     while (1) {
-        int access_time = probe_cache_line(0); // Line 0 is start signal
-        if (access_time > THRESHOLD) {
+        int access_time = probe_cache_line(0);
+        if (access_time < THRESHOLD) { // Fast access → no signal yet
             break;
         }
-        usleep(1000); // Sleep 1ms between checks
+        usleep(1000);
+    }
+
+    // Then wait until start signal is SET (high latency)
+    while (1) {
+        int access_time = probe_cache_line(0);
+        if (access_time > THRESHOLD) { // Slow access → sender signaling
+            break;
+        }
+        usleep(1000);
     }
 }
 
