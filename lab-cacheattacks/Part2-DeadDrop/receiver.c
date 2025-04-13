@@ -69,7 +69,7 @@ int main() {
         }
         printf("%d\n", received);
         fflush(stdout);
-        usleep(100000); // Wait longer before next listen
+        usleep(100000);
     }
     return 0;
 }

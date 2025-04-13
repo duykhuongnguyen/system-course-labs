@@ -8,23 +8,18 @@
 #include <sys/mman.h>
 
 #define BUFF_SIZE (1 << 21) // 2MB Huge page
-#define PRIMES_PER_BIT 16    // Prime more lines per bit for stronger signal
 
 volatile uint8_t *buffer;
 
 void prime_cache(uint8_t value) {
-    // Prime the start signal
-    for (int offset = 0; offset < PRIMES_PER_BIT; offset++) {
-        volatile uint8_t *start_addr = buffer + offset * 64;
-        *start_addr;
-    }
+    // Prime the start signal (only touch buffer[0])
+    volatile uint8_t *start_addr = buffer;
+    *start_addr;
 
     for (int i = 0; i < 8; i++) {
         if ((value >> i) & 1) {
-            for (int offset = 0; offset < PRIMES_PER_BIT; offset++) {
-                volatile uint8_t *addr = buffer + ((i + 1) * 4096) + offset * 64;
-                *addr;
-            }
+            volatile uint8_t *addr = buffer + ((i + 1) * 4096);
+            *addr;
         }
     }
 }
@@ -55,8 +50,9 @@ int main() {
         scanf("%d", &value);
         prime_cache((uint8_t)value);
         usleep(100000); // 100ms to give receiver enough time
-        clear_start_signal(); // 🛠️ Clear start signal properly
-        cool_down(); // Clean up cache after sending
+        printf("[Sender] Sent value: %d\n", value);
+        clear_start_signal();
+        cool_down();
     }
     return 0;
 }
