@@ -1,4 +1,4 @@
-// RECEIVER.C (Double Handshake)
+// RECEIVER.C (Receive full string)
 #include "util.h"
 #include <sys/mman.h>
 #include <stdio.h>
@@ -12,6 +12,7 @@
 #define BASE_SET_INDEX 500
 #define SET_SPACING 10
 #define VOTE_COUNT 10
+#define SYNC_BYTE 170
 
 uint64_t probe_cache(volatile uint8_t *buf, int set_index) {
     uint64_t total_time = 0;
@@ -45,13 +46,25 @@ int read_byte(volatile uint8_t *buf) {
     return received;
 }
 
+int detect_sync(volatile uint8_t *buf) {
+    int sync_votes = 0;
+    for (int i = 0; i < 10; i++) {
+        int byte = read_byte(buf);
+        if (byte == SYNC_BYTE) {
+            sync_votes++;
+        }
+        usleep(500);
+    }
+    return (sync_votes >= 8);
+}
+
 int main(int argc, char **argv) {
     void *buf = mmap(NULL, BUFF_SIZE, PROT_READ | PROT_WRITE, MAP_POPULATE | MAP_ANONYMOUS | MAP_PRIVATE | MAP_HUGETLB, -1, 0);
     if (buf == (void *) -1) {
         perror("mmap() error\n");
         exit(EXIT_FAILURE);
     }
-    ((char *)buf)[0] = 1; // Dummy write
+    ((char *)buf)[0] = 1;
 
     printf("Please press enter.\n");
     char text_buf[2];
@@ -59,21 +72,10 @@ int main(int argc, char **argv) {
     printf("Receiver now listening.\n");
 
     while (1) {
-        int first_sync = read_byte((volatile uint8_t *)buf);
-
-        if (first_sync == 255) { // First sync detected
-            usleep(2000); // Little wait
-            int second_sync = read_byte((volatile uint8_t *)buf);
-
-            if (second_sync == 255) { // Second sync detected
-                printf("Double sync detected! Ready to receive real message.\n");
-
-                int real_message = read_byte((volatile uint8_t *)buf);
-                printf("Received: %d\n", real_message);
-                fflush(stdout);
-            } else {
-                // false alarm, ignore and continue
-            }
+        if (detect_sync((volatile uint8_t *)buf)) {
+            int ch = read_byte((volatile uint8_t *)buf);
+            printf("%c", (char)ch);
+            fflush(stdout);
         }
     }
 
