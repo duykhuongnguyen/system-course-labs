@@ -10,8 +10,9 @@
 #define CACHE_LINE_SIZE 64
 #define NUM_L2_CACHE_SETS 2048
 #define PROBES 30
-#define WAYS 16
+#define WAYS 32        // <--- increased ways to 32
 #define NUM_GUESSES 5  // how many guesses to make total
+#define PAGE_STRIDE (4096 * 8)  // <--- bigger stride
 
 // Manual rdtscp inline function
 static inline uint64_t rdtscp() {
@@ -46,7 +47,7 @@ int main(int argc, char const *argv[]) {
             for (int i = 0; i < PROBES; i++) {
                 uint64_t start = rdtscp();
                 for (int way = 0; way < WAYS; way++) {
-                    volatile uint8_t *addr = buf + (set * CACHE_LINE_SIZE) + (way * 4096);
+                    volatile uint8_t *addr = buf + (set * CACHE_LINE_SIZE) + (way * PAGE_STRIDE);  // <-- fixed here
                     *addr;
                 }
                 uint64_t end = rdtscp();
