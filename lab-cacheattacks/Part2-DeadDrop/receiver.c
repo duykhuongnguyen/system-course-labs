@@ -1,83 +1,56 @@
-// RECEIVER.C (Receive full string)
+// receiver.c
 #include "util.h"
-#include <sys/mman.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <stdint.h>
-#include <string.h>
+#include <stdlib.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <sys/mman.h>
 
-#define BUFF_SIZE (1<<21)
-#define CACHE_LINE_SIZE 64
-#define BASE_SET_INDEX 500
-#define SET_SPACING 10
-#define VOTE_COUNT 10
-#define SYNC_BYTE 170
+#define BUFF_SIZE (1 << 21)
+#define THRESHOLD 150
 
-uint64_t probe_cache(volatile uint8_t *buf, int set_index) {
-    uint64_t total_time = 0;
-    for (int j = 0; j < 8; j++) {
-        volatile uint8_t *addr = buf + ((BASE_SET_INDEX + set_index * SET_SPACING) * CACHE_LINE_SIZE) + (j * 4096);
-        total_time += measure_one_block_access_time((uint64_t)addr);
-    }
-    return total_time / 8;
+volatile uint8_t *buffer;
+
+int probe_cache_line(int idx) {
+    volatile uint8_t *addr = buffer + (idx * 64);
+    uint64_t time = measure_one_block_access_time((void *)addr);
+    return time;
 }
 
-int read_bit(volatile uint8_t *buf, int bit_index) {
-    int votes = 0;
-    for (int i = 0; i < VOTE_COUNT; i++) {
-        uint64_t time = probe_cache(buf, bit_index);
-        if (time > 200) {
-            votes++;
+void wait_for_start_signal() {
+    while (1) {
+        int access_time = probe_cache_line(0); // Line 0 is start signal
+        if (access_time > THRESHOLD) {
+            break;
         }
-        usleep(200);
+        usleep(1000); // Sleep 1ms between checks
     }
-    return (votes > VOTE_COUNT / 2) ? 1 : 0;
 }
 
-int read_byte(volatile uint8_t *buf) {
-    int received = 0;
-    for (int bit = 0; bit < 8; bit++) {
-        int bit_value = read_bit(buf, bit);
-        if (bit_value) {
-            received |= (1 << bit);
-        }
+int main() {
+    buffer = mmap(NULL, BUFF_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
+    if (buffer == MAP_FAILED) {
+        perror("mmap");
+        exit(1);
     }
-    return received;
-}
-
-int detect_sync(volatile uint8_t *buf) {
-    int sync_votes = 0;
-    for (int i = 0; i < 10; i++) {
-        int byte = read_byte(buf);
-        if (byte == SYNC_BYTE) {
-            sync_votes++;
-        }
-        usleep(500);
-    }
-    return (sync_votes >= 8);
-}
-
-int main(int argc, char **argv) {
-    void *buf = mmap(NULL, BUFF_SIZE, PROT_READ | PROT_WRITE, MAP_POPULATE | MAP_ANONYMOUS | MAP_PRIVATE | MAP_HUGETLB, -1, 0);
-    if (buf == (void *) -1) {
-        perror("mmap() error\n");
-        exit(EXIT_FAILURE);
-    }
-    ((char *)buf)[0] = 1;
 
     printf("Please press enter.\n");
-    char text_buf[2];
-    fgets(text_buf, sizeof(text_buf), stdin);
+    getchar();
     printf("Receiver now listening.\n");
 
     while (1) {
-        if (detect_sync((volatile uint8_t *)buf)) {
-            int ch = read_byte((volatile uint8_t *)buf);
-            printf("%c", (char)ch);
-            fflush(stdout);
+        wait_for_start_signal();
+        uint8_t received = 0;
+        for (int i = 0; i < 8; i++) {
+            int access_time = probe_cache_line(i + 1);
+            if (access_time > THRESHOLD) {
+                received |= (1 << i);
+            }
         }
+        printf("%d\n", received);
+        fflush(stdout);
+        usleep(50000); // Delay between receives
     }
-
     return 0;
 }
