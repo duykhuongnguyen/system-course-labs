@@ -8,12 +8,13 @@
 #include <sys/mman.h>
 
 #define BUFF_SIZE (1 << 21) // 2MB Huge page
+#define START_SIGNAL_LINE 100 // Use cache line 100 for start signal
 
 volatile uint8_t *buffer;
 
 void prime_cache(uint8_t value) {
-    // Prime the start signal (only touch buffer[0])
-    volatile uint8_t *start_addr = buffer;
+    // Prime the start signal (touch buffer[4096 * 100])
+    volatile uint8_t *start_addr = buffer + (START_SIGNAL_LINE * 4096);
     *start_addr;
 
     for (int i = 0; i < 8; i++) {
@@ -25,7 +26,7 @@ void prime_cache(uint8_t value) {
 }
 
 void clear_start_signal() {
-    volatile uint8_t *start_addr = buffer;
+    volatile uint8_t *start_addr = buffer + (START_SIGNAL_LINE * 4096);
     for (int i = 0; i < 4096; i += 64) {
         *(start_addr + i);
     }

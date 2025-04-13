@@ -10,6 +10,7 @@
 #define BUFF_SIZE (1 << 21)
 #define THRESHOLD 160
 #define NUM_SAMPLES 5
+#define START_SIGNAL_LINE 100
 
 volatile uint8_t *buffer;
 
@@ -31,8 +32,8 @@ int read_bit(int idx) {
 void wait_for_start_signal() {
     // First wait until start signal is CLEAR (low latency)
     while (1) {
-        int access_time = probe_cache_line(0);
-        printf("[Debug] Access time to line 0: %d\n", access_time);
+        int access_time = probe_cache_line(START_SIGNAL_LINE);
+        printf("[Debug] Access time to start signal line: %d\n", access_time);
         fflush(stdout);
         if (access_time < THRESHOLD) {
             break;
@@ -42,8 +43,8 @@ void wait_for_start_signal() {
 
     // Then wait until start signal is SET (high latency)
     while (1) {
-        int access_time = probe_cache_line(0);
-        printf("[Debug] Access time to line 0: %d\n", access_time);
+        int access_time = probe_cache_line(START_SIGNAL_LINE);
+        printf("[Debug] Access time to start signal line: %d\n", access_time);
         fflush(stdout);
         if (access_time > THRESHOLD) {
             break;
