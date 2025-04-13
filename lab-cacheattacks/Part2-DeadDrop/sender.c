@@ -24,6 +24,13 @@ void prime_cache(uint8_t value) {
     }
 }
 
+void cool_down() {
+    for (int i = 0; i < 1000; i++) {
+        volatile uint8_t *addr = buffer + (rand() % BUFF_SIZE);
+        *addr;
+    }
+}
+
 int main() {
     buffer = mmap(NULL, BUFF_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
     if (buffer == MAP_FAILED) {
@@ -36,6 +43,7 @@ int main() {
         scanf("%d", &value);
         prime_cache((uint8_t)value);
         usleep(50000); // 50ms delay for receiver to catch up
+        cool_down(); // Clean up cache after sending
     }
     return 0;
 }

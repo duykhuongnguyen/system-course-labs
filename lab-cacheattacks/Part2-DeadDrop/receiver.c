@@ -50,7 +50,7 @@ int main() {
         }
         printf("%d\n", received);
         fflush(stdout);
-        usleep(50000); // Delay between receives
+        usleep(50000); // Wait a bit before next listen
     }
     return 0;
 }
