@@ -60,6 +60,12 @@ int main() {
         exit(1);
     }
 
+    // Warm up the start signal cache line
+    volatile uint8_t *start_addr = buffer + (START_SIGNAL_LINE * 4096);
+    for (int i = 0; i < 1000; i++) {
+        *(start_addr + (i * 64));
+    }
+
     printf("Please press enter.\n");
     getchar();
     printf("Receiver now listening.\n");
