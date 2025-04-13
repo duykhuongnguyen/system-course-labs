@@ -150,7 +150,7 @@ int main() {
     
     // Print top 3 candidates for verification
     printf("Top candidates for the flag:\n");
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 20; i++) {
         int max_set = -1;
         int curr_max = 0;
         
