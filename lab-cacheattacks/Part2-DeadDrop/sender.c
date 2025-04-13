@@ -24,6 +24,13 @@ void prime_cache(uint8_t value) {
     }
 }
 
+void clear_start_signal() {
+    volatile uint8_t *start_addr = buffer;
+    for (int i = 0; i < 1000; i++) {
+        *(start_addr + (rand() % 4096)); // Touch random offsets near start to evict
+    }
+}
+
 void cool_down() {
     for (int i = 0; i < 1000; i++) {
         volatile uint8_t *addr = buffer + (rand() % BUFF_SIZE);
@@ -32,7 +39,7 @@ void cool_down() {
 }
 
 int main() {
-    buffer = mmap(NULL, BUFF_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_PRIVATE | MAP_HUGETLB, -1, 0);
+    buffer = mmap(NULL, BUFF_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
     if (buffer == MAP_FAILED) {
         perror("mmap");
         exit(1);
@@ -43,6 +50,7 @@ int main() {
         scanf("%d", &value);
         prime_cache((uint8_t)value);
         usleep(50000); // 50ms delay for receiver to catch up
+        clear_start_signal(); // 🛠️ New: actively clear start signal
         cool_down(); // Clean up cache after sending
     }
     return 0;
