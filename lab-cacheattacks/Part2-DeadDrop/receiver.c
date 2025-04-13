@@ -9,7 +9,7 @@
 
 #define BUFF_SIZE (1<<21)
 #define CACHE_LINE_SIZE 64
-#define BASE_SET_INDEX 500  // Same as sender
+#define BASE_SET_INDEX 500
 #define SET_SPACING 10
 
 uint64_t probe_cache(volatile uint8_t *buf, int set_index) {
@@ -34,23 +34,32 @@ int main(int argc, char **argv) {
     fgets(text_buf, sizeof(text_buf), stdin);
     printf("Receiver now listening.\n");
 
-    bool listening = true;
+    bool waiting_for_sync = true;
 
-    while (listening) {
+    while (1) {
         int received = 0;
 
         for (int bit = 0; bit < 8; bit++) {
             uint64_t time = probe_cache((volatile uint8_t *)buf, bit);
-            if (time > 200) { // Threshold: >200 cycles means "1"
+            if (time > 200) {
                 received |= (1 << bit);
             }
             usleep(500); // Sync with sender
         }
 
-        printf("%d\n", received);
+        if (waiting_for_sync) {
+            if (received == 255) {
+                printf("Sync detected! Ready to receive message.\n");
+                waiting_for_sync = false;
+            }
+            continue; // Ignore garbage until sync seen
+        }
+
+        printf("Received: %d\n", received);
         fflush(stdout);
+
+        waiting_for_sync = true; // After receiving a message, expect new sync
     }
 
-    printf("Receiver finished.\n");
     return 0;
 }
