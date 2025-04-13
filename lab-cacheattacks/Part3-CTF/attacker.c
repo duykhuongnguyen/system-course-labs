@@ -29,13 +29,13 @@ int main(int argc, char const *argv[]) {
     for (int set = 0; set < NUM_L2_CACHE_SETS; set++) {
         uint64_t total_time = 0;
         for (int i = 0; i < PROBES; i++) {
-            uint64_t start = rdtscp64();
+            uint64_t start = rdtscp();  // <--- changed
             // Access 8 different cache lines for the set
             for (int way = 0; way < 8; way++) {
                 volatile uint8_t *addr = buf + (set * CACHE_LINE_SIZE) + (way * 4096);
                 *addr;
             }
-            uint64_t end = rdtscp64();
+            uint64_t end = rdtscp();    // <--- changed
             total_time += (end - start);
         }
         times[set] = total_time / PROBES;
