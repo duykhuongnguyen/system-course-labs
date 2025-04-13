@@ -16,7 +16,7 @@ uint64_t probe_set(volatile uint8_t *buf, int set_index) {
 
     for (int i = 0; i < samples; i++) {
         volatile uint8_t *addr = buf + (set_index * 64) + (i * 4096);
-        total_time += measure_one_block_access_time((void *)addr);
+        total_time += measure_one_block_access_time((uint64_t)addr);  // <-- CAST TO uint64_t
     }
     return total_time / samples;
 }
