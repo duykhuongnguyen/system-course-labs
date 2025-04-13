@@ -11,6 +11,18 @@
 #define NUM_L2_CACHE_SETS 2048
 #define PROBES 10
 
+// <--- ADD THIS FUNCTION
+static inline uint64_t rdtscp() {
+    uint32_t lo, hi;
+    __asm__ volatile (
+        "rdtscp"
+        : "=a" (lo), "=d" (hi)
+        :
+        : "%rcx"
+    );
+    return ((uint64_t)hi << 32) | lo;
+}
+
 int main(int argc, char const *argv[]) {
     int flag = -1;
 
