@@ -52,7 +52,7 @@ int main() {
     printf("Receiver now listening.\n");
 
     while (1) {
-        wait_for_start_signal();
+        wait_for_start_signal();  // <-- Move this INSIDE the loop
         uint8_t received = 0;
         for (int i = 0; i < 8; i++) {
             if (read_bit(i + 1)) {
