@@ -1,0 +1,18 @@
+Single-Bit Communication Protocol
+
+Encode:
+- Bit 1: Sender accesses 300 unique cache lines at 64-byte intervals to fill L2.
+- Bit 0: Sender does not access the buffer and sleeps for BIT_DURATION_US.
+
+Receive:
+- Receiver probes same memory layout, measuring access latency to each line.
+
+Decode:
+- Receiver calculates average access latency across 300 lines.
+- If average > THRESHOLD (150), bit = 1. Otherwise, bit = 0.
+
+Threshold:
+- Empirically derived from timing experiments.
+  - Bit 0: ~96 cycles
+  - Bit 1: ~300–370 cycles
+  - Chosen threshold = 150 cycles
