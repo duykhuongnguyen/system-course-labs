@@ -10,7 +10,6 @@
 #define BUFF_SIZE (1 << 21)
 #define THRESHOLD 160
 #define NUM_SAMPLES 5
-#define START_SIGNAL_LINE 100
 
 volatile uint8_t *buffer;
 
@@ -30,40 +29,22 @@ int read_bit(int idx) {
 }
 
 void wait_for_start_signal() {
-    // First wait until start signal is CLEAR (low latency)
-    while (1) {
-        int access_time = probe_cache_line(START_SIGNAL_LINE);
-        printf("[Debug] Access time to start signal line: %d\n", access_time);
-        fflush(stdout);
-        if (access_time < THRESHOLD) {
-            break;
-        }
+    // Wait for start signal to clear (low latency)
+    while (probe_cache_line(0) > THRESHOLD) {
         usleep(5000);
     }
-
-    // Then wait until start signal is SET (high latency)
-    while (1) {
-        int access_time = probe_cache_line(START_SIGNAL_LINE);
-        printf("[Debug] Access time to start signal line: %d\n", access_time);
-        fflush(stdout);
-        if (access_time > THRESHOLD) {
-            break;
-        }
+    // Wait for start signal to appear (high latency)
+    while (probe_cache_line(0) < THRESHOLD) {
         usleep(5000);
     }
 }
 
 int main() {
-    buffer = mmap(NULL, BUFF_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_PRIVATE | MAP_HUGETLB, -1, 0);
+    buffer = mmap(NULL, BUFF_SIZE, PROT_READ | PROT_WRITE,
+                  MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
     if (buffer == MAP_FAILED) {
         perror("mmap");
         exit(1);
-    }
-
-    // Warm up the start signal cache line
-    volatile uint8_t *start_addr = buffer + (START_SIGNAL_LINE * 4096);
-    for (int i = 0; i < 1000; i++) {
-        *(start_addr + (i * 64));
     }
 
     printf("Please press enter.\n");
