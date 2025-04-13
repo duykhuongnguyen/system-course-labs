@@ -23,11 +23,11 @@ void send_byte(volatile uint8_t *buf, uint8_t byte) {
     for (int bit = 0; bit < 8; bit++) {
         int bit_value = (byte >> bit) & 1;
         if (bit_value == 1) {
-            for (int k = 0; k < 1000; k++) {
+            for (int k = 0; k < 1000; k++) { // heavy prime to make sure it shows
                 prime_cache(buf, bit);
             }
         }
-        usleep(500); // short wait between bits
+        usleep(500); // short delay between bits
     }
 }
 
@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
         perror("mmap() error\n");
         exit(EXIT_FAILURE);
     }
-    ((char *)buf)[0] = 1; // Dummy write
+    ((char *)buf)[0] = 1; // Dummy write to trigger allocation
 
     printf("Please type a message (integer 0-255):\n");
 
@@ -46,12 +46,13 @@ int main(int argc, char **argv) {
         fgets(input_buf, sizeof(input_buf), stdin);
         int msg = atoi(input_buf);
 
-        // Step 1: Send synchronization signal
-        send_byte((volatile uint8_t *)buf, 0xFF);  // 255 indicates start
+        // Step 1: Double synchronization signal
+        send_byte((volatile uint8_t *)buf, 0xFF); // 255
+        usleep(1000); // short delay
+        send_byte((volatile uint8_t *)buf, 0xFF); // 255 again
+        usleep(1000);
 
-        usleep(1000); // Little extra gap
-
-        // Step 2: Send actual message
+        // Step 2: Send real message
         send_byte((volatile uint8_t *)buf, (uint8_t)msg);
 
         printf("Sent: %d\n", msg);

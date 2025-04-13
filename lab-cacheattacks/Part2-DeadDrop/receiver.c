@@ -1,4 +1,4 @@
-// RECEIVER.C with Voting
+// RECEIVER.C (Double Handshake)
 #include "util.h"
 #include <sys/mman.h>
 #include <stdio.h>
@@ -26,10 +26,10 @@ int read_bit(volatile uint8_t *buf, int bit_index) {
     int votes = 0;
     for (int i = 0; i < VOTE_COUNT; i++) {
         uint64_t time = probe_cache(buf, bit_index);
-        if (time > 200) { // Threshold: >200 cycles means "1"
+        if (time > 200) {
             votes++;
         }
-        usleep(200); // tiny sleep to avoid hammering
+        usleep(200);
     }
     return (votes > VOTE_COUNT / 2) ? 1 : 0;
 }
@@ -58,23 +58,23 @@ int main(int argc, char **argv) {
     fgets(text_buf, sizeof(text_buf), stdin);
     printf("Receiver now listening.\n");
 
-    bool waiting_for_sync = true;
-
     while (1) {
-        int received = read_byte((volatile uint8_t *)buf);
+        int first_sync = read_byte((volatile uint8_t *)buf);
 
-        if (waiting_for_sync) {
-            if (received == 255) {
-                printf("Sync detected! Ready to receive message.\n");
-                waiting_for_sync = false;
+        if (first_sync == 255) { // First sync detected
+            usleep(2000); // Little wait
+            int second_sync = read_byte((volatile uint8_t *)buf);
+
+            if (second_sync == 255) { // Second sync detected
+                printf("Double sync detected! Ready to receive real message.\n");
+
+                int real_message = read_byte((volatile uint8_t *)buf);
+                printf("Received: %d\n", real_message);
+                fflush(stdout);
+            } else {
+                // false alarm, ignore and continue
             }
-            continue; // Ignore garbage until sync seen
         }
-
-        printf("Received: %d\n", received);
-        fflush(stdout);
-
-        waiting_for_sync = true; // After receiving a message, expect new sync
     }
 
     return 0;
