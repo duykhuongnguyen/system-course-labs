@@ -24,22 +24,16 @@ void send_byte(volatile uint8_t *buf, uint8_t byte) {
     for (int bit = 0; bit < 8; bit++) {
         int bit_value = (byte >> bit) & 1;
         if (bit_value == 1) {
-            for (int k = 0; k < 1000; k++) {
+            for (int k = 0; k < 5000; k++) {  // INCREASED hammering!
                 prime_cache(buf, bit);
             }
         }
-        usleep(500);
+        usleep(1000); // INCREASED sleep between bits
     }
 }
 
 int main(int argc, char **argv) {
-    void *buf = mmap(NULL, BUFF_SIZE, PROT_READ | PROT_WRITE, MAP_POPULATE | MAP_ANONYMOUS | MAP_PRIVATE | MAP_HUGETLB, -1, 0);
-    if (buf == (void *) -1) {
-        perror("mmap() error\n");
-        exit(EXIT_FAILURE);
-    }
-    ((char *)buf)[0] = 1;
-
+    ...
     printf("Please type a message to send:\n");
 
     char input_buf[256];
@@ -47,26 +41,24 @@ int main(int argc, char **argv) {
         fgets(input_buf, sizeof(input_buf), stdin);
         size_t len = strlen(input_buf);
 
-        // Remove trailing newline
         if (input_buf[len-1] == '\n') {
             input_buf[len-1] = '\0';
             len--;
         }
 
         for (size_t i = 0; i < len; i++) {
-            // Double sync before every character
-            send_byte((volatile uint8_t *)buf, SYNC_BYTE);
-            usleep(1000);
-            send_byte((volatile uint8_t *)buf, SYNC_BYTE);
-            usleep(1000);
+            // DOUBLE SYNC
+            send_byte((volatile uint8_t *)buf, 170);
+            usleep(5000);  // INCREASED sleep
+            send_byte((volatile uint8_t *)buf, 170);
+            usleep(5000);
 
-            // Send character
+            // SEND CHARACTER
             send_byte((volatile uint8_t *)buf, (uint8_t)input_buf[i]);
             printf("Sent character: %c\n", input_buf[i]);
             fflush(stdout);
-            usleep(5000);  // Small pause between characters
+
+            usleep(10000); // BIGGER sleep between characters
         }
     }
-
-    return 0;
 }
